@@ -65,11 +65,6 @@ app.get('/api/projects', (req, res) => {
     res.json({ projects });
 });
 
-// INTENTIONALLY VULNERABLE: for security testing only
-app.get('/api/unsafe', (req, res) => {
-    const result = eval(req.query.expression);
-    res.json({ result });
-});
 
 // Create a project
 app.post('/api/projects', (req, res) => {
