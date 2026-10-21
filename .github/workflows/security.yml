@@ -1,0 +1,135 @@
+name: SecureScan Security Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
+
+jobs:
+  security-scan:
+    name: SAST and npm Dependency Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Semgrep SAST
+        id: semgrep
+        continue-on-error: true
+        run: |
+          pip install semgrep
+          semgrep scan \
+            --config p/owasp-top-ten \
+            --json \
+            --output semgrep-results.json \
+            .
+
+      - name: Comment Semgrep findings on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            if (!fs.existsSync('semgrep-results.json')) {
+              core.warning('Semgrep results were not generated.');
+              return;
+            }
+
+            const results = JSON.parse(
+              fs.readFileSync('semgrep-results.json', 'utf8')
+            ).results || [];
+
+            const severity = {
+              ERROR: 'HIGH',
+              WARNING: 'MEDIUM',
+              INFO: 'LOW'
+            };
+
+            let body = '## SecureScan — SAST Results\n\n';
+
+            if (results.length === 0) {
+              body += '✅ No Semgrep findings detected.';
+            } else {
+              body += `Found **${results.length} finding(s)**:\n\n`;
+
+              for (const finding of results.slice(0, 40)) {
+                const level =
+                  severity[finding.extra?.severity] || 'REVIEW';
+
+                body +=
+                  `- **${level}** — ${finding.check_id}\n` +
+                  `  - File: \`${finding.path}:${finding.start.line}\`\n` +
+                  `  - ${finding.extra?.message || 'Review finding'}\n\n`;
+              }
+
+              if (results.length > 40) {
+                body += '\nAdditional findings are available in the workflow results.';
+              }
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Block HIGH or CRITICAL SAST findings
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+
+          with open("semgrep-results.json", encoding="utf-8") as file:
+              results = json.load(file).get("results", [])
+
+          blocking = [
+              result for result in results
+              if result.get("extra", {}).get("severity") == "ERROR"
+          ]
+
+          for result in blocking:
+              print(
+                  f"HIGH: {result['check_id']} "
+                  f"at {result['path']}:{result['start']['line']}"
+              )
+
+          if blocking:
+              print(f"Blocking merge: {len(blocking)} high-severity finding(s).")
+              sys.exit(1)
+
+          print("No blocking Semgrep findings.")
+
+      - name: Run npm dependency audit
+        run: npm audit --audit-level=high
+
+  osv-scan:
+    name: OSV-Scanner Dependency Scan
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0
+
+    with:
+      scan-args: |-
+        --lockfile=package-lock.json
+      fail-on-vuln: false
