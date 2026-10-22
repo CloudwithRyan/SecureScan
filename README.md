@@ -93,4 +93,12 @@ Security scanner findings require review before a developer decides how to respo
 
 For example, a scanner may flag a potentially unsafe operation even when the relevant input is constrained or the flagged code path cannot be reached with attacker-controlled data. The developer should examine the source code, trace the input, and assess exploitability before deciding whether the alert is a false positive.
 
-For this project, the intentionally unsafe `eval()` endpoint was a genuine security concern because request input was executed as code. It should not be dismissed as a false positive. Any claimed false positive must be supported by evidence and documented before an exception is considered.
+For this project, the intentionally unsafe `eval()` endpoint was a genuine security concern because request input was executed as code. It should not be dismissed as a false positive. Any claimed false positive must be supported by evidence and documented before an exception is considered.## False-Positive Assessment Example
+
+A potential false positive can occur when a security scanner flags a database query containing a variable without fully accounting for how the query is constructed.
+
+For example, a scanner might flag a SQL query that uses user-provided values. If the application uses parameterised queries, passing user input separately from the SQL statement, the input cannot alter the query structure in the way that SQL injection requires.
+
+Before dismissing such a finding, the developer must inspect the relevant code, verify that parameterisation is correctly implemented, and confirm that untrusted input cannot modify the SQL statement. The finding should only be classified as a false positive when the code and scanner rule support that conclusion.
+
+This is an illustrative example of false-positive assessment, not a finding reported by the SecureScan scans documented above. Any exception in a real pull request must include its technical justification and be reviewed before the finding is suppressed.
