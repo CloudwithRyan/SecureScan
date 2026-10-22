@@ -65,6 +65,7 @@ app.get('/api/projects', (req, res) => {
     res.json({ projects });
 });
 
+
 // Create a project
 app.post('/api/projects', (req, res) => {
     const { error, value } = projectSchema.validate(req.body);
