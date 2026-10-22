@@ -4,7 +4,6 @@
 
 The SecureScan pipeline automatically checks code changes before they can be merged into the `main` branch.
 
-```mermaid
 flowchart TD
     A[Developer] --> B[Create Pull Request to main]
     B --> C[GitHub Actions Workflow]
